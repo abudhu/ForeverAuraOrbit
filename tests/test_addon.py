@@ -220,6 +220,32 @@ class IntegrationTests(unittest.TestCase):
                 'Toggling the aura off clears the marker and pulse')
         ''')
 
+    def test_arc_clearance_adds_only_four_pixels_without_moving_hover_anchor(self):
+        self.lua.globals().Core = self.ns.Core
+        self.lua.execute('''
+            ForeverAuraOrbitTrigger:Fire('OnEnter')
+            ForeverAuraOrbitAnimator:Fire('OnUpdate',1)
+            local px,py=ForeverAuraOrbitRoot:GetCenter()
+            local lx,ly=ForeverAuraOrbitTrigger:GetCenter()
+            local angle=math.deg(math.atan2(ly-py,lx-px))
+            local startRadius=math.sqrt((lx-px)^2+(ly-py)^2)
+            local portrait=PlayerFrame.PlayerFrameContainer.PlayerPortrait
+            local originalRadius=math.max(45,portrait:GetWidth()/2+26/2+5)
+            local count=ForeverAuraOrbitPanel:GetAttribute('count')
+            for i=1,count do
+                local oldX,oldY=Core.Position(i,count,originalRadius,1,angle,startRadius)
+                local b=_G['ForeverAuraOrbitButton'..i]
+                local x,y=b.point[4],b.point[5]
+                assert(math.abs(math.sqrt((x-oldX)^2+(y-oldY)^2)-4)<0.000001,
+                    'Move the arc just four pixels outward')
+                assert(math.abs(x*oldY-y*oldX)<0.000001, 'Keep the same arc angles')
+            end
+            assert(ForeverAuraOrbitPanel.point[2]==ForeverAuraOrbitRoot,
+                'Do not move or replace the original auto-hide anchor')
+            assert(ForeverAuraOrbitTrigger.point[4]==13 and ForeverAuraOrbitTrigger.point[5]==-27,
+                'Do not change the level hover area')
+        ''')
+
     def test_texture_regions_without_frame_scale_methods_are_supported(self):
         self.lua.execute('''
             PlayerFrame.PlayerFrameContainer.PlayerPortrait.GetEffectiveScale=false

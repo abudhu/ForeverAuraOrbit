@@ -253,7 +253,7 @@ local function refresh()
     panel:ClearAllPoints()
     panel:SetPoint("CENTER", root, "CENTER")
     trigger:SetSize(math.max(22, level:GetWidth()), math.max(22, level:GetHeight()))
-    radius = math.max(45, portrait:GetWidth() / 2 + SIZE / 2 + 5)
+    radius = math.max(45, portrait:GetWidth() / 2 + SIZE / 2 + 5) + 4
     local px, py = portrait:GetCenter()
     local lx, ly = level:GetCenter()
     if px and py and lx and ly then
