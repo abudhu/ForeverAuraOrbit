@@ -49,9 +49,10 @@ end
 
 -- A clockwise arc leaves the health/mana bars to the right unobstructed.
 -- Expand the radius for unusually large/custom aura lists instead of overlapping.
-function Core.Position(index, count, radius, progress, startAngle, startRadius)
+function Core.Position(index, count, radius, progress, startAngle, startRadius, endAngle)
     startAngle, startRadius = startAngle or -65, startRadius or 26
     local span = math.min(220, math.max(0, count - 1) * 40)
+    if endAngle then span = math.min(span, math.max(0, startAngle - endAngle)) end
     local step = count > 1 and span / (count - 1) or 0
     if step > 0 then radius = math.max(radius, 30 / (2 * math.sin(math.rad(step / 2)))) end
     local p = math.max(0, math.min(1, progress))
@@ -59,4 +60,24 @@ function Core.Position(index, count, radius, progress, startAngle, startRadius)
     local angle = math.rad(startAngle - (index - 1) * step * eased)
     local r = startRadius + (radius - startRadius) * eased
     return r * math.cos(angle), r * math.sin(angle)
+end
+
+-- Fit a left/top arc outside the badge and before the bar's left edge.
+-- Opening uses the fitted radius too, so visible icons never pass over the badge.
+function Core.ArcLayout(count, baseRadius, badgeAngle, badgeRadius, badgeHalf, iconHalf, barLeft, gap)
+    badgeAngle = (badgeAngle + 180) % 360 - 180
+    local first = math.max(-170, math.min(-100, badgeAngle))
+    local last = -280
+    local radius = math.max(baseRadius, badgeRadius + badgeHalf + iconHalf + gap)
+    local rightLimit = barLeft - iconHalf - gap
+    for _ = 1, 16 do
+        local span = math.min(220, math.max(0, count - 1) * 40, math.max(0, first - last))
+        local step = count > 1 and span / (count - 1) or 0
+        if step > 0 then radius = math.max(radius, 30 / (2 * math.sin(math.rad(step / 2)))) end
+        if radius * math.cos(math.rad(last)) > rightLimit then
+            local ratio = math.max(-0.999, math.min(1, rightLimit / radius))
+            last = -360 + math.deg(math.acos(ratio)) + 0.01
+        end
+    end
+    return radius, first, last
 end

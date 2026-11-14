@@ -2,7 +2,7 @@ local addonName, ns = ...
 local Core = ns.Core
 local buttons, auras = {}, {}
 local root, panel, trigger, animator
-local radius, startAngle, startRadius = 48, -65, 26
+local radius, startAngle, startRadius, endAngle = 48, -65, 26, -280
 local elapsed, pending = 0, false
 local DURATION, SIZE = 0.24, 26
 local ASSET = "Interface\\AddOns\\ForeverAuraOrbit\\Media\\Ring"
@@ -79,7 +79,7 @@ end
 local function position(progress)
     for i = 1, #auras do
         local b = buttons[i]
-        local x, y = Core.Position(i, #auras, radius, progress, startAngle, startRadius)
+        local x, y = Core.Position(i, #auras, radius, progress, startAngle, startRadius, endAngle)
         b:ClearAllPoints()
         b:SetPoint("CENTER", panel, "CENTER", x, y)
         b:SetAlpha(math.min(1, progress * 3))
@@ -232,6 +232,19 @@ local function anchorToRegion(frame, region)
     return true
 end
 
+local function leftInRoot(region)
+    if not region then return nil end
+    local left
+    if region.GetRect then left = region:GetRect()
+    elseif region.GetLeft then left = region:GetLeft() end
+    if not left then return nil end
+    local owner = region.GetEffectiveScale and region or region:GetParent()
+    local rootX = root:GetCenter()
+    if not owner or not rootX then return nil end
+    local scale = root:GetEffectiveScale()
+    return (left * owner:GetEffectiveScale() - rootX * scale) / scale
+end
+
 local function refresh()
     if InCombatLockdown() then pending = true; return end
     if not PlayerFrame then pending = true; return end
@@ -254,24 +267,44 @@ local function refresh()
     panel:SetPoint("CENTER", root, "CENTER")
     trigger:SetSize(math.max(22, level:GetWidth()), math.max(22, level:GetHeight()))
     radius = math.max(45, portrait:GetWidth() / 2 + SIZE / 2 + 5)
+    local badgeDisplay = PlayerLevelText or level
     local px, py = portrait:GetCenter()
-    local lx, ly = level:GetCenter()
+    local lx, ly = badgeDisplay:GetCenter()
+    if not px or not py or not lx or not ly then
+        trigger:Hide()
+        pending = true
+        return
+    end
     if px and py and lx and ly then
         -- GetCenter coordinates are expressed in the region's effective scale.
         local portraitScaleOwner = portrait.GetEffectiveScale and portrait or portrait:GetParent()
-        local levelScaleOwner = level.GetEffectiveScale and level or level:GetParent()
+        local levelScaleOwner = badgeDisplay.GetEffectiveScale and badgeDisplay or badgeDisplay:GetParent()
         local ps, ls = portraitScaleOwner:GetEffectiveScale(), levelScaleOwner:GetEffectiveScale()
         local dx, dy = (lx * ls - px * ps) / root:GetEffectiveScale(), (ly * ls - py * ps) / root:GetEffectiveScale()
         startAngle, startRadius = math.deg(math.atan2(dy, dx)), math.sqrt(dx * dx + dy * dy)
     end
     auras = readAuras()
+    local badgeOwner = badgeDisplay.GetEffectiveScale and badgeDisplay or badgeDisplay:GetParent()
+    local badgeScale = badgeOwner:GetEffectiveScale() / root:GetEffectiveScale()
+    local width, height = badgeDisplay:GetWidth(), badgeDisplay:GetHeight()
+    local badgeHalf = math.max(11, math.sqrt(width * width + height * height) * badgeScale / 2 + 2)
+    local health = (main and main.HealthBarsContainer and main.HealthBarsContainer.HealthBar)
+        or PlayerFrame.healthbar or PlayerFrameHealthBar
+    local portraitOwner = portrait.GetEffectiveScale and portrait or portrait:GetParent()
+    local barLeft = leftInRoot(health) or
+        (portrait:GetWidth() * portraitOwner:GetEffectiveScale() / root:GetEffectiveScale() / 2 + 6)
+    local nameLeft = leftInRoot(PlayerName or PlayerFrame.name)
+    if nameLeft then barLeft = math.min(barLeft, nameLeft) end
+    radius, startAngle, endAngle = Core.ArcLayout(#auras, radius, startAngle, startRadius,
+        badgeHalf, SIZE / 2 + 4, barLeft, 4)
+    startRadius = radius
     for i, aura in ipairs(auras) do
         if not buttons[i] then buttons[i] = newButton(i) end
         local b = buttons[i]
         b.icon:SetTexture(aura.icon)
         b:SetAttribute("spell", aura.spellID)
-        b:SetAttribute("final-x", (Core.Position(i, #auras, radius, 1, startAngle, startRadius)))
-        local _, y = Core.Position(i, #auras, radius, 1, startAngle, startRadius)
+        b:SetAttribute("final-x", (Core.Position(i, #auras, radius, 1, startAngle, startRadius, endAngle)))
+        local _, y = Core.Position(i, #auras, radius, 1, startAngle, startRadius, endAngle)
         b:SetAttribute("final-y", y)
         b:Show()
         panel:SetFrameRef("button" .. i, b)

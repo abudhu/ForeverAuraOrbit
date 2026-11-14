@@ -75,6 +75,40 @@ class CoreTests(unittest.TestCase):
         """)
 
 
+    def test_frame_fitted_arc_clears_number_and_stops_before_bar(self):
+        self.lua.globals().Core = self.ns.Core
+        self.lua.execute('''
+            local cases={
+                {angle=-140, distance=34, half=12, bar=40}, -- screenshot-like left badge
+                {angle=-65, distance=30, half=11, bar=35},
+                {angle=-140, distance=34, half=12, bar=24},
+            }
+            for _,c in ipairs(cases) do
+                local bx=c.distance*math.cos(math.rad(c.angle))
+                local by=c.distance*math.sin(math.rad(c.angle))
+                for count=1,12 do
+                    local radius,first,last=Core.ArcLayout(count,48,c.angle,c.distance,c.half,17,c.bar,4)
+                    assert(first<=-100 and first>=-170, 'Start on the lower-left, not in the bar')
+                    assert(last>=-280, 'Stop above the portrait before wrapping into the bar')
+                    if count>=5 and count<=7 then assert(radius<=85, 'Do not create a needlessly distant fan') end
+                    for _,p in ipairs({0,0.1,0.25,0.5,0.75,1}) do
+                        local previousX,previousY
+                        for i=1,count do
+                            local x,y=Core.Position(i,count,radius,p,first,radius,last)
+                            assert(math.sqrt((x-bx)^2+(y-by)^2)>=c.half+17+4-0.000001,
+                                'Aura artwork must clear the level badge')
+                            assert(x+17+4<=c.bar+0.000001, 'Aura artwork must stop before the bar area')
+                            if p==1 and previousX then
+                                assert(math.sqrt((x-previousX)^2+(y-previousY)^2)>=30-0.000001,
+                                    'Keep usable spacing between icons')
+                            end
+                            previousX,previousY=x,y
+                        end
+                    end
+                end
+            end
+        ''')
+
 class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
@@ -218,6 +252,107 @@ class IntegrationTests(unittest.TestCase):
             FireEvent('UPDATE_SHAPESHIFT_FORM')
             assert(not b.active:IsShown() and not b.pulseAnimation:IsPlaying(),
                 'Toggling the aura off clears the marker and pulse')
+        ''')
+
+    def test_screenshot_layout_clears_level_badge_and_live_bar_bounds(self):
+        self.lua.execute('''
+            Forms[#Forms+1]={19876,'Shadow Resistance Aura',104,false}
+            Forms[#Forms+1]={19888,'Frost Resistance Aura',105,false}
+            Forms[#Forms+1]={19891,'Fire Resistance Aura',106,false}
+            local level=PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.LevelBackgroundCircle
+            level.cx,level.cy=74,78
+            PlayerLevelText.cx,PlayerLevelText.cy=74,78
+            local health=CreateFrame('Frame',nil,PlayerFrame)
+            health.cx,health.cy,health.w,health.h=200,105,120,14
+            PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.HealthBarsContainer={HealthBar=health}
+            local function check()
+                local left=health:GetRect()
+                local lx,ly=ForeverAuraOrbitTrigger:GetCenter()
+                for i=1,ForeverAuraOrbitPanel:GetAttribute('count') do
+                    local b=_G['ForeverAuraOrbitButton'..i]
+                    local x,y=b:GetCenter()
+                    assert(math.sqrt((x-lx)^2+(y-ly)^2)>=11+17+4-0.000001,
+                        'Aura outline must not intersect the level badge')
+                    assert(x+17+4<=left+0.000001, 'Arc must end before the health/name bar area')
+                end
+            end
+            SlashCmdList.FOREVERAURAORBIT('refresh')
+            ForeverAuraOrbitTrigger:Fire('OnEnter')
+            check()
+            for step=1,6 do ForeverAuraOrbitAnimator:Fire('OnUpdate',0.04); check() end
+            SetCombat(true); check()
+            SetCombat(false)
+            health.cx=180 -- tighter frame geometry must adjust the endpoint
+            SlashCmdList.FOREVERAURAORBIT('refresh')
+            ForeverAuraOrbitTrigger:Fire('OnEnter')
+            ForeverAuraOrbitAnimator:Fire('OnUpdate',1)
+            check()
+        ''')
+
+    def test_missing_health_bar_fallback_fits_scaled_portrait_clearance(self):
+        self.lua.execute('''
+            Forms[#Forms+1]={19876,'Shadow Resistance Aura',104,false}
+            Forms[#Forms+1]={19888,'Frost Resistance Aura',105,false}
+            Forms[#Forms+1]={19891,'Fire Resistance Aura',106,false}
+            local main=PlayerFrame.PlayerFrameContent.PlayerFrameContentMain
+            main.HealthBarsContainer=nil
+            PlayerFrame.healthbar,PlayerFrameHealthBar=nil,nil
+            PlayerName,PlayerFrame.name=nil,nil
+            local portrait=PlayerFrame.PlayerFrameContainer.PlayerPortrait
+            local portraitOwner=CreateFrame('Frame',nil,PlayerFrame)
+            portraitOwner.cx,portraitOwner.cy=180,190
+            portraitOwner.GetEffectiveScale=function() return 0.5 end
+            portrait.parent=portraitOwner
+            portrait.cx,portrait.cy,portrait.w=200,200,60
+            local level=main.LevelBackgroundCircle
+            local levelOwner=CreateFrame('Frame',nil,PlayerFrame)
+            levelOwner.GetEffectiveScale=function() return 2 end
+            level.parent,PlayerLevelText.parent=levelOwner,levelOwner
+            level.cx,level.cy=37,39
+            PlayerLevelText.cx,PlayerLevelText.cy=37,39
+            PlayerLevelText.w,PlayerLevelText.h=9,7
+            level.GetEffectiveScale,PlayerLevelText.GetEffectiveScale=false,false
+            -- Exercise both region scale and Texture parent-scale fallback.
+            for _,hasRegionScale in ipairs({true,false}) do
+                portrait.GetEffectiveScale=hasRegionScale and
+                    function() return 0.5 end or false
+                SlashCmdList.FOREVERAURAORBIT('refresh')
+                local root=ForeverAuraOrbitRoot
+                assert(root:GetEffectiveScale()==1, 'Root scale must differ from portrait and badge')
+                local rx,ry=root:GetCenter()
+                assert(math.abs(rx-100)<0.000001 and math.abs(ry-100)<0.000001,
+                    'Root must stay at the scaled portrait center')
+                assert(ForeverAuraOrbitPanel:GetAttribute('count')==6, 'Fit all six auras')
+                local barLeft=portrait:GetWidth()*0.5/root:GetEffectiveScale()/2+6
+                assert(barLeft==21, 'Fallback boundary must be in root coordinates')
+                local badgeHalf=math.sqrt(18*18+14*14)/2+2
+                local function check()
+                    for i=1,6 do
+                        local b=_G['ForeverAuraOrbitButton'..i]
+                        local x,y=b:GetCenter()
+                        assert(x-rx+17+4<=barLeft+0.000001,
+                            'Scaled missing-bar fallback must clear every aura outline plus gap')
+                        assert(math.sqrt((x-74)^2+(y-78)^2)>=badgeHalf+17+4-0.000001,
+                            'Fitted arc must also clear the differently scaled level badge')
+                    end
+                end
+                check()
+                ForeverAuraOrbitTrigger:Fire('OnEnter')
+                check()
+                for step=1,6 do ForeverAuraOrbitAnimator:Fire('OnUpdate',0.04); check() end
+                SetCombat(true); check()
+                SetCombat(false)
+            end
+        ''')
+
+    def test_missing_number_geometry_defers_instead_of_reusing_fitted_radius(self):
+        self.lua.execute('''
+            PlayerLevelText.GetCenter=function() return nil,nil end
+            SlashCmdList.FOREVERAURAORBIT('refresh')
+            assert(not ForeverAuraOrbitTrigger:IsShown(), 'Wait for number geometry before placing the arc')
+            PlayerLevelText.GetCenter=nil
+            FireEvent('PLAYER_ENTERING_WORLD')
+            assert(ForeverAuraOrbitTrigger:IsShown(), 'Rebuild when geometry becomes available')
         ''')
 
     def test_texture_regions_without_frame_scale_methods_are_supported(self):

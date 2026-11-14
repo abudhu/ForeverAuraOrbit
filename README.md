@@ -6,6 +6,12 @@ A standalone paladin addon for World of Warcraft Forever (Interface `16001`).
 
 ## Usage
 
+### Frame-clearance experiment
+
+On `fix/arc-frame-clearance`, version `0.1.2-frame-clearance.1` fits the arc around the left/top of the portrait. It reserves space for the level badge and aura outlines, and caps the endpoint before the live health/name-bar bounds. The radius is only enlarged as needed for clearance and usable icon spacing; this is not the bottom-fan layout.
+
+Opening begins at the safe outer slot instead of drawing over the level number. Layout changes remain outside combat, and the existing secure hover/cast behavior is retained. If bar geometry is unavailable, a conservative portrait-edge bound is used. In-game appearance still needs visual acceptance; `main` and `v0.1.2` are unchanged.
+
 Hover the level badge on the default player unit frame to unfold your learned auras clockwise around the portrait. Click an icon to activate the aura.
 
 - Gold outlines identify the active aura.
