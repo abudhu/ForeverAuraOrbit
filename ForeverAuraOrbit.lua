@@ -251,9 +251,8 @@ local function refresh()
         return
     end
     panel:ClearAllPoints()
-    panel:SetPoint("CENTER", root, "CENTER")
     trigger:SetSize(math.max(22, level:GetWidth()), math.max(22, level:GetHeight()))
-    radius = math.max(45, portrait:GetWidth() / 2 + SIZE / 2 + 5) + 4
+    radius = math.max(45, portrait:GetWidth() / 2 + SIZE / 2 + 5)
     local px, py = portrait:GetCenter()
     local lx, ly = level:GetCenter()
     if px and py and lx and ly then
@@ -264,6 +263,8 @@ local function refresh()
         local dx, dy = (lx * ls - px * ps) / root:GetEffectiveScale(), (ly * ls - py * ps) / root:GetEffectiveScale()
         startAngle, startRadius = math.deg(math.atan2(dy, dx)), math.sqrt(dx * dx + dy * dy)
     end
+    -- Translate the whole arc; preserve its original radius and icon spacing.
+    panel:SetPoint("CENTER", root, "CENTER", 4 * math.cos(math.rad(startAngle)), 4 * math.sin(math.rad(startAngle)))
     auras = readAuras()
     for i, aura in ipairs(auras) do
         if not buttons[i] then buttons[i] = newButton(i) end

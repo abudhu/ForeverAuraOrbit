@@ -220,30 +220,43 @@ class IntegrationTests(unittest.TestCase):
                 'Toggling the aura off clears the marker and pulse')
         ''')
 
-    def test_arc_clearance_adds_only_four_pixels_without_moving_hover_anchor(self):
+    def test_anchor_shift_preserves_original_arc_and_icon_spacing(self):
         self.lua.globals().Core = self.ns.Core
         self.lua.execute('''
-            ForeverAuraOrbitTrigger:Fire('OnEnter')
-            ForeverAuraOrbitAnimator:Fire('OnUpdate',1)
             local px,py=ForeverAuraOrbitRoot:GetCenter()
             local lx,ly=ForeverAuraOrbitTrigger:GetCenter()
             local angle=math.deg(math.atan2(ly-py,lx-px))
             local startRadius=math.sqrt((lx-px)^2+(ly-py)^2)
+            local ox,oy=ForeverAuraOrbitPanel.point[4] or 0,ForeverAuraOrbitPanel.point[5] or 0
+            assert(math.abs(ox-4*(lx-px)/startRadius)<0.000001 and
+                math.abs(oy-4*(ly-py)/startRadius)<0.000001,
+                'Shift the initial anchor four pixels away from the number')
+            ForeverAuraOrbitTrigger:Fire('OnEnter')
+            local sx,sy=ForeverAuraOrbitButton1:GetCenter()
+            assert(math.abs(sx-lx-ox)<0.000001 and math.abs(sy-ly-oy)<0.000001,
+                'Opening must start at the shifted anchor')
+            ForeverAuraOrbitAnimator:Fire('OnUpdate',1)
             local portrait=PlayerFrame.PlayerFrameContainer.PlayerPortrait
             local originalRadius=math.max(45,portrait:GetWidth()/2+26/2+5)
             local count=ForeverAuraOrbitPanel:GetAttribute('count')
+            local lastX,lastY,lastOldX,lastOldY
             for i=1,count do
                 local oldX,oldY=Core.Position(i,count,originalRadius,1,angle,startRadius)
                 local b=_G['ForeverAuraOrbitButton'..i]
-                local x,y=b.point[4],b.point[5]
-                assert(math.abs(math.sqrt((x-oldX)^2+(y-oldY)^2)-4)<0.000001,
-                    'Move the arc just four pixels outward')
-                assert(math.abs(x*oldY-y*oldX)<0.000001, 'Keep the same arc angles')
+                assert(math.abs(b.point[4]-oldX)<0.000001 and math.abs(b.point[5]-oldY)<0.000001,
+                    'Keep the original radius and every local slot position')
+                local x,y=b:GetCenter()
+                assert(math.abs(x-px-oldX-ox)<0.000001 and math.abs(y-py-oldY-oy)<0.000001,
+                    'Translate every icon by exactly the same anchor offset')
+                if lastX then
+                    local distance=math.sqrt((x-lastX)^2+(y-lastY)^2)
+                    local oldDistance=math.sqrt((oldX-lastOldX)^2+(oldY-lastOldY)^2)
+                    assert(math.abs(distance-oldDistance)<0.000001, 'Do not change spacing between icons')
+                end
+                lastX,lastY,lastOldX,lastOldY=x,y,oldX,oldY
             end
-            assert(ForeverAuraOrbitPanel.point[2]==ForeverAuraOrbitRoot,
-                'Do not move or replace the original auto-hide anchor')
             assert(ForeverAuraOrbitTrigger.point[4]==13 and ForeverAuraOrbitTrigger.point[5]==-27,
-                'Do not change the level hover area')
+                'Do not move the number hover target')
         ''')
 
     def test_texture_regions_without_frame_scale_methods_are_supported(self):
