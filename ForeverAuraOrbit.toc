@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Forever Aura Orbit
+## Notes: Hover your player level badge to unfold a clickable arc of learned paladin auras around your portrait.
+## Author: Local
+## Version: 0.1.2
+## DefaultState: enabled
+## IconTexture: Interface\Icons\Spell_Holy_DevotionAura
+
+Core.lua
+ForeverAuraOrbit.lua
